@@ -13,7 +13,7 @@ except:
 
 
 def generate_lineidx(filein: str, idxout: str) -> None:
-    idxout_tmp = idxout + '.tmp'
+    idxout_tmp = f'{idxout}.tmp'
     with open(filein, 'r') as tsvin, open(idxout_tmp, 'w') as tsvout:
         fsize = os.fstat(tsvin.fileno()).st_size
         fpos = 0
@@ -45,10 +45,9 @@ class TSVFile(object):
                  class_selector: List[str] = None,
                  blob_storage: BlobStorage = None):
         self.tsv_file = tsv_file
-        self.lineidx = op.splitext(tsv_file)[0] + '.lineidx' \
-            if not lineidx else lineidx
-        self.linelist = op.splitext(tsv_file)[0] + '.linelist'
-        self.chunks = op.splitext(tsv_file)[0] + '.chunks'
+        self.lineidx = lineidx or f'{op.splitext(tsv_file)[0]}.lineidx'
+        self.linelist = f'{op.splitext(tsv_file)[0]}.linelist'
+        self.chunks = f'{op.splitext(tsv_file)[0]}.chunks'
         self._fp = None
         self._lineidx = None
         self._sample_indices = None
@@ -80,7 +79,7 @@ class TSVFile(object):
                     pass
 
     def __str__(self):
-        return "TSVFile(tsv_file='{}')".format(self.tsv_file)
+        return f"TSVFile(tsv_file='{self.tsv_file}')"
 
     def __repr__(self):
         return str(self)
@@ -113,7 +112,7 @@ class TSVFile(object):
         try:
             pos = self._lineidx[self._sample_indices[idx]]
         except:
-            logging.info('=> {}-{}'.format(self.tsv_file, idx))
+            logging.info(f'=> {self.tsv_file}-{idx}')
             raise
         self._fp.seek(pos)
         return [s.strip() for s in self._fp.readline().split('\t')]
@@ -135,43 +134,41 @@ class TSVFile(object):
         return self.num_rows()
 
     def _ensure_lineidx_loaded(self):
-        if self._lineidx is None:
-            logging.debug('=> loading lineidx: {}'.format(self.lineidx))
-            with open(self.lineidx, 'r') as fp:
-                lines = fp.readlines()
-                lines = [line.strip() for line in lines]
-                self._lineidx = [int(line) for line in lines]
+        if self._lineidx is not None:
+            return
+        logging.debug(f'=> loading lineidx: {self.lineidx}')
+        with open(self.lineidx, 'r') as fp:
+            lines = fp.readlines()
+            lines = [line.strip() for line in lines]
+            self._lineidx = [int(line) for line in lines]
 
-            # read the line list if exists
-            linelist = None
-            if op.isfile(self.linelist):
-                with open(self.linelist, 'r') as fp:
-                    linelist = sorted(
-                        [
-                            int(line.strip())
-                            for line in fp.readlines()
-                        ]
-                    )
+        # read the line list if exists
+        linelist = None
+        if op.isfile(self.linelist):
+            with open(self.linelist, 'r') as fp:
+                linelist = sorted(
+                    [
+                        int(line.strip())
+                        for line in fp.readlines()
+                    ]
+                )
 
-            if op.isfile(self.chunks):
-                self._sample_indices = []
-                self._class_boundaries = []
-                class_boundaries = json.load(open(self.chunks, 'r'))
-                for class_name, boundary in class_boundaries.items():
-                    start = len(self._sample_indices)
-                    if class_name in self._class_selector:
-                        for idx in range(boundary[0], boundary[1] + 1):
-                            # NOTE: potentially slow when linelist is long, try to speed it up
-                            if linelist and idx not in linelist:
-                                continue
-                            self._sample_indices.append(idx)
-                    end = len(self._sample_indices)
-                    self._class_boundaries.append((start, end))
-            else:
-                if linelist:
-                    self._sample_indices = linelist
-                else:
-                    self._sample_indices = list(range(len(self._lineidx)))
+        if op.isfile(self.chunks):
+            self._sample_indices = []
+            self._class_boundaries = []
+            class_boundaries = json.load(open(self.chunks, 'r'))
+            for class_name, boundary in class_boundaries.items():
+                start = len(self._sample_indices)
+                if class_name in self._class_selector:
+                    for idx in range(boundary[0], boundary[1] + 1):
+                        # NOTE: potentially slow when linelist is long, try to speed it up
+                        if linelist and idx not in linelist:
+                            continue
+                        self._sample_indices.append(idx)
+                end = len(self._sample_indices)
+                self._class_boundaries.append((start, end))
+        else:
+            self._sample_indices = linelist or list(range(len(self._lineidx)))
 
     def _ensure_tsv_opened(self):
         if self._fp is None:
@@ -182,7 +179,7 @@ class TSVFile(object):
             self.pid = os.getpid()
 
         if self.pid != os.getpid():
-            logging.debug('=> re-open {} because the process id changed'.format(self.tsv_file))
+            logging.debug(f'=> re-open {self.tsv_file} because the process id changed')
             self._fp = open(self.tsv_file, 'r')
             self.pid = os.getpid()
 
@@ -190,9 +187,9 @@ class TSVFile(object):
 class TSVWriter(object):
     def __init__(self, tsv_file):
         self.tsv_file = tsv_file
-        self.lineidx_file = op.splitext(tsv_file)[0] + '.lineidx'
-        self.tsv_file_tmp = self.tsv_file + '.tmp'
-        self.lineidx_file_tmp = self.lineidx_file + '.tmp'
+        self.lineidx_file = f'{op.splitext(tsv_file)[0]}.lineidx'
+        self.tsv_file_tmp = f'{self.tsv_file}.tmp'
+        self.lineidx_file_tmp = f'{self.lineidx_file}.tmp'
 
         self.tsv_fp = open(self.tsv_file_tmp, 'w')
         self.lineidx_fp = open(self.lineidx_file_tmp, 'w')

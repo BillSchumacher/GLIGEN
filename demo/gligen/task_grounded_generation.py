@@ -123,12 +123,11 @@ def get_clip_feature(model, processor, input, is_image=False):
 
 def complete_mask(has_mask, max_objs):
     mask = torch.ones(1,max_objs)
-    if type(has_mask) == int or type(has_mask) == float:
+    if type(has_mask) in [int, float]:
         return mask * has_mask
-    else:
-        for idx, value in enumerate(has_mask):
-            mask[0,idx] = value
-        return mask
+    for idx, value in enumerate(has_mask):
+        mask[0,idx] = value
+    return mask
 
 
 
@@ -137,12 +136,11 @@ def fire_clip(text_encoder, meta, batch=1, max_objs=30, clip_model=None):
     phrases = meta["phrases"]
     images = meta["images"]
 
+    version = "openai/clip-vit-large-patch14"
     if clip_model is None:
-        version = "openai/clip-vit-large-patch14"
         model = CLIPModel.from_pretrained(version).cuda()
         processor = CLIPProcessor.from_pretrained(version)
     else:
-        version = "openai/clip-vit-large-patch14"
         assert clip_model['version'] == version
         model = clip_model['model']
         processor = clip_model['processor']
@@ -152,14 +150,14 @@ def fire_clip(text_encoder, meta, batch=1, max_objs=30, clip_model=None):
     text_embeddings = torch.zeros(max_objs, 768)
     image_embeddings = torch.zeros(max_objs, 768)
 
-    
+
     text_features = []
     image_features = []
     for phrase, image in zip(phrases,images):
         text_features.append(  get_clip_feature(model, processor, phrase, is_image=False) )
         image_features.append( get_clip_feature(model, processor, image,  is_image=True) )
-    
-    if len(text_features) > 0:
+
+    if text_features:
         text_features = torch.cat(text_features, dim=0)
         image_features = torch.cat(image_features, dim=0)
 
@@ -168,8 +166,8 @@ def fire_clip(text_encoder, meta, batch=1, max_objs=30, clip_model=None):
             masks[idx] = 1
             text_embeddings[idx] = text_feature
             image_embeddings[idx] = image_feature
-    
-    
+
+
     out = {
         "boxes" : boxes.unsqueeze(0).repeat(batch,1,1),
         "masks" : masks.unsqueeze(0).repeat(batch,1),
@@ -190,7 +188,7 @@ def grounded_generation_box(loaded_model_list, instruction, *args, **kwargs):
     # -------------- prepare model and misc --------------- # 
     model, autoencoder, text_encoder, diffusion = loaded_model_list
     batch_size = instruction["batch_size"]
-    is_inpaint = True if "input_image" in instruction else False
+    is_inpaint = "input_image" in instruction
     save_folder = os.path.join("create_samples", instruction["save_folder_name"])
 
 
@@ -235,12 +233,8 @@ def grounded_generation_box(loaded_model_list, instruction, *args, **kwargs):
 
     # ------------- prepare sampler ------------- #
     alpha_generator_func = partial(alpha_generator, type=instruction["alpha_type"])
-    if False:
-        sampler = DDIMSampler(diffusion, model, alpha_generator_func=alpha_generator_func, set_alpha_scale=set_alpha_scale)
-        steps = 250 
-    else:
-        sampler = PLMSSampler(diffusion, model, alpha_generator_func=alpha_generator_func, set_alpha_scale=set_alpha_scale)
-        steps = 50 
+    sampler = PLMSSampler(diffusion, model, alpha_generator_func=alpha_generator_func, set_alpha_scale=set_alpha_scale)
+    steps = 50 
 
     # ------------- run sampler ... ------------- #
     shape = (batch_size, model.in_channels, model.image_size, model.image_size)
@@ -261,10 +255,10 @@ def grounded_generation_box(loaded_model_list, instruction, *args, **kwargs):
     overlay_list = []
     for image_id, sample in zip(image_ids, samples_fake):
         # save in local
-        img_name = str(int(image_id))+'.png'
+        img_name = f'{int(image_id)}.png'
 
         sample = torch.clamp(sample, min=-1, max=1) * 0.5 + 0.5
-        sample = sample.cpu().numpy().transpose(1,2,0) * 255 
+        sample = sample.cpu().numpy().transpose(1,2,0) * 255
         sample = Image.fromarray(sample.astype(np.uint8))
 
         overlay = draw_box(sample.copy(), instruction['locations'])

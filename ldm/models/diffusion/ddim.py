@@ -65,9 +65,9 @@ class DDIMSampler(object):
     @torch.no_grad()
     def ddim_sampling(self, shape, input, uc, guidance_scale=1, mask=None, x0=None):
         b = shape[0]
-        
+
         img = input["x"]
-        if img == None:     
+        if img is None:     
             img = torch.randn(shape, device=self.device)
             input["x"] = img
 
@@ -77,7 +77,7 @@ class DDIMSampler(object):
 
         #iterator = tqdm(time_range, desc='DDIM Sampler', total=total_steps)
         iterator = time_range
-  
+
         if self.alpha_generator_func != None:
             alphas = self.alpha_generator_func(len(iterator))
 
@@ -91,13 +91,13 @@ class DDIMSampler(object):
             # run 
             index = total_steps - i - 1
             input["timesteps"] = torch.full((b,), step, device=self.device, dtype=torch.long)
-            
+
             if mask is not None:
                 assert x0 is not None
                 img_orig = self.diffusion.q_sample( x0, input["timesteps"] ) 
                 img = img_orig * mask + (1. - mask) * img
                 input["x"] = img
-            
+
             img, pred_x0 = self.p_sample_ddim(input, index=index, uc=uc, guidance_scale=guidance_scale)
             input["x"] = img 
 

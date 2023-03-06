@@ -22,7 +22,7 @@ device = "cuda"
 def set_alpha_scale(model, alpha_scale):
     from ldm.modules.attention import GatedCrossAttentionDense, GatedSelfAttentionDense
     for module in model.modules():
-        if type(module) == GatedCrossAttentionDense or type(module) == GatedSelfAttentionDense:
+        if type(module) in [GatedCrossAttentionDense, GatedSelfAttentionDense]:
             module.scale = alpha_scale
 
 
@@ -40,27 +40,27 @@ def alpha_generator(length, type=None):
     then the first 800 stpes, alpha will be 1, and then linearly decay to 0 in the next 100 steps,
     and the last 100 stpes are 0.    
     """
-    if type == None:
+    if type is None:
         type = [1,0,0]
 
-    assert len(type)==3 
+    assert len(type)==3
     assert type[0] + type[1] + type[2] == 1
-    
+
     stage0_length = int(type[0]*length)
     stage1_length = int(type[1]*length)
     stage2_length = length - stage0_length - stage1_length
-    
+
     if stage1_length != 0: 
         decay_alphas = np.arange(start=0, stop=1, step=1/stage1_length)[::-1]
         decay_alphas = list(decay_alphas)
     else:
         decay_alphas = []
-        
-    
+
+
     alphas = [1]*stage0_length + decay_alphas + [0]*stage2_length
-    
+
     assert len(alphas) == length
-    
+
     return alphas
 
 
@@ -97,30 +97,28 @@ def project(x, projection_matrix):
 
 
 def get_clip_feature(model, processor, input, is_image=False):
-    which_layer_text = 'before'
-    which_layer_image = 'after_reproject'
-
+    if input is None:
+        return None
     if is_image:
-        if input == None:
-            return None
         image = Image.open(input).convert("RGB")
         inputs = processor(images=[image],  return_tensors="pt", padding=True)
         inputs['pixel_values'] = inputs['pixel_values'].cuda() # we use our own preprocessing without center_crop 
         inputs['input_ids'] = torch.tensor([[0,1,2,3]]).cuda()  # placeholder
         outputs = model(**inputs)
-        feature = outputs.image_embeds 
+        feature = outputs.image_embeds
+        which_layer_image = 'after_reproject'
+
         if which_layer_image == 'after_reproject':
             feature = project( feature, torch.load('projection_matrix').cuda().T ).squeeze(0)
             feature = ( feature / feature.norm() )  * 28.7 
             feature = feature.unsqueeze(0)
     else:
-        if input == None:
-            return None
         inputs = processor(text=input,  return_tensors="pt", padding=True)
         inputs['input_ids'] = inputs['input_ids'].cuda()
         inputs['pixel_values'] = torch.ones(1,3,224,224).cuda() # placeholder 
         inputs['attention_mask'] = inputs['attention_mask'].cuda()
         outputs = model(**inputs)
+        which_layer_text = 'before'
         if which_layer_text == 'before':
             feature = outputs.text_model_output.pooler_output
     return feature
@@ -128,23 +126,22 @@ def get_clip_feature(model, processor, input, is_image=False):
 
 def complete_mask(has_mask, max_objs):
     mask = torch.ones(1,max_objs)
-    if has_mask == None:
+    if has_mask is None:
         return mask 
 
-    if type(has_mask) == int or type(has_mask) == float:
+    if type(has_mask) in [int, float]:
         return mask * has_mask
-    else:
-        for idx, value in enumerate(has_mask):
-            mask[0,idx] = value
-        return mask
+    for idx, value in enumerate(has_mask):
+        mask[0,idx] = value
+    return mask
 
 
 
 @torch.no_grad()
 def prepare_batch(meta, batch=1, max_objs=30):
     phrases, images = meta.get("phrases"), meta.get("images")
-    images = [None]*len(phrases) if images==None else images 
-    phrases = [None]*len(images) if phrases==None else phrases 
+    images = [None]*len(phrases) if images is None else images
+    phrases = [None]*len(images) if phrases is None else phrases 
 
     version = "openai/clip-vit-large-patch14"
     model = CLIPModel.from_pretrained(version).cuda()
@@ -156,7 +153,7 @@ def prepare_batch(meta, batch=1, max_objs=30):
     image_masks = torch.zeros(max_objs)
     text_embeddings = torch.zeros(max_objs, 768)
     image_embeddings = torch.zeros(max_objs, 768)
-    
+
     text_features = []
     image_features = []
     for phrase, image in zip(phrases,images):
@@ -252,16 +249,16 @@ def run(meta, config, starting_noise=None):
     if "input_image" in meta:
         # inpaint mode 
         assert config.inpaint_mode, 'input_image is given, the ckpt must be the inpaint model, are you using the correct ckpt?'
-        
+
         inpainting_mask = draw_masks_from_boxes( batch['boxes'], model.image_size  ).cuda()
-        
+
         input_image = F.pil_to_tensor( Image.open(meta["input_image"]).convert("RGB").resize((512,512)) ) 
         input_image = ( input_image.float().unsqueeze(0).cuda() / 255 - 0.5 ) / 0.5
         z0 = autoencoder.encode( input_image )
-        
+
         masked_z = z0*inpainting_mask
         inpainting_extra_input = torch.cat([masked_z,inpainting_mask], dim=1)              
-    
+
 
     # - - - - - input for gligen - - - - - #
     grounding_input = grounding_tokenizer_input.prepare(batch)
@@ -289,9 +286,9 @@ def run(meta, config, starting_noise=None):
     image_ids = list(range(start,start+config.batch_size))
     print(image_ids)
     for image_id, sample in zip(image_ids, samples_fake):
-        img_name = str(int(image_id))+'.png'
+        img_name = f'{int(image_id)}.png'
         sample = torch.clamp(sample, min=-1, max=1) * 0.5 + 0.5
-        sample = sample.cpu().numpy().transpose(1,2,0) * 255 
+        sample = sample.cpu().numpy().transpose(1,2,0) * 255
         sample = Image.fromarray(sample.astype(np.uint8))
         sample.save(  os.path.join(output_folder, img_name)   )
 

@@ -66,9 +66,9 @@ class PLMSSampler(object):
     def plms_sampling(self, shape, input, uc=None, guidance_scale=1, mask=None, x0=None):
 
         b = shape[0]
-        
+
         img = input["x"]
-        if img == None:     
+        if img is None:     
             img = torch.randn(shape, device=self.device)
             input["x"] = img
 

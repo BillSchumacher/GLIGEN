@@ -37,15 +37,17 @@ class ImageCaptionSaver:
 
     def __call__(self, images, real, masked_real, captions, seen):
         
-        save_path = os.path.join(self.base_path, str(seen).zfill(8)+'.png')
+        save_path = os.path.join(self.base_path, f'{str(seen).zfill(8)}.png')
         torchvision.utils.save_image( images, save_path, nrow=self.nrow, normalize=self.normalize, scale_each=self.scale_each, range=self.range )
-        
-        save_path = os.path.join(self.base_path, str(seen).zfill(8)+'_real.png')
+
+        save_path = os.path.join(self.base_path, f'{str(seen).zfill(8)}_real.png')
         torchvision.utils.save_image( real, save_path, nrow=self.nrow)
 
         if masked_real is not None:
-            # only inpaiting mode case 
-            save_path = os.path.join(self.base_path, str(seen).zfill(8)+'_mased_real.png')
+            # only inpaiting mode case
+            save_path = os.path.join(
+                self.base_path, f'{str(seen).zfill(8)}_mased_real.png'
+            )
             torchvision.utils.save_image( masked_real, save_path, nrow=self.nrow, normalize=self.normalize, scale_each=self.scale_each, range=self.range)
 
         assert images.shape[0] == len(captions)
@@ -60,15 +62,15 @@ class ImageCaptionSaver:
 
 
 def read_official_ckpt(ckpt_path):      
-    "Read offical pretrained SD ckpt and convert into my style" 
+    "Read offical pretrained SD ckpt and convert into my style"
     state_dict = torch.load(ckpt_path, map_location="cpu")["state_dict"]
-    out = {}
-    out["model"] = {}
-    out["text_encoder"] = {}
-    out["autoencoder"] = {}
-    out["unexpected"] = {}
-    out["diffusion"] = {}
-
+    out = {
+        "model": {},
+        "text_encoder": {},
+        "autoencoder": {},
+        "unexpected": {},
+        "diffusion": {},
+    }
     for k,v in state_dict.items():
         if k.startswith('model.diffusion_model'):
             out["model"][k.replace("model.diffusion_model.", "")] = v 
@@ -79,7 +81,7 @@ def read_official_ckpt(ckpt_path):
         elif k in ["model_ema.decay", "model_ema.num_updates"]:
             out["unexpected"][k] = v  
         else:
-            out["diffusion"][k] = v     
+            out["diffusion"][k] = v
     return out 
 
 
@@ -91,17 +93,16 @@ def batch_to_device(batch, device):
 
 
 def sub_batch(batch, num=1):
-    # choose first num in given batch 
-    num = num if num > 1 else 1 
+    # choose first num in given batch
+    num = max(num, 1)
     for k in batch:
-        batch[k] = batch[k][0:num]
+        batch[k] = batch[k][:num]
     return batch
 
 
 def wrap_loader(loader):
     while True:
-        for batch in loader:  # TODO: it seems each time you have the same order for all epoch?? 
-            yield batch
+        yield from loader
 
 
 def disable_grads(model):
@@ -110,9 +111,7 @@ def disable_grads(model):
 
 
 def count_params(params):
-    total_trainable_params_count = 0 
-    for p in params:
-        total_trainable_params_count += p.numel()
+    total_trainable_params_count = sum(p.numel() for p in params)
     print("total_trainable_params_count is: ", total_trainable_params_count)
 
 
@@ -136,9 +135,9 @@ def create_expt_folder_with_auto_resuming(OUTPUT_ROOT, name):
             if os.path.exists(potential_ckpt):
                 checkpoint = potential_ckpt
                 if get_rank() == 0:
-                    print('auto-resuming ckpt found '+ potential_ckpt)
-                break 
-        curr_tag = 'tag'+str(len(all_existing_tags)).zfill(2)
+                    print(f'auto-resuming ckpt found {potential_ckpt}')
+                break
+        curr_tag = f'tag{str(len(all_existing_tags)).zfill(2)}'
         name = os.path.join( name, curr_tag ) # output/name/tagxx
     else:
         name = os.path.join( name, 'tag00' ) # output/name/tag00
@@ -409,7 +408,7 @@ class Trainer:
             batch = sub_batch( next(self.loader_train), batch_here)
             batch_to_device(batch, self.device)
 
-            
+
             if "boxes" in batch:
                 real_images_with_box_drawing = [] # we save this durining trianing for better visualization
                 for i in range(batch_here):
@@ -420,14 +419,14 @@ class Trainer:
             else:
                 # keypoint case 
                 real_images_with_box_drawing = batch["image"]*0.5 + 0.5 
-                
-            
+
+
             uc = self.text_encoder.encode( batch_here*[""] )
             context = self.text_encoder.encode(  batch["caption"]  )
-            
+
             plms_sampler = PLMSSampler(self.diffusion, model_wo_wrapper)      
             shape = (batch_here, model_wo_wrapper.in_channels, model_wo_wrapper.image_size, model_wo_wrapper.image_size)
-            
+
             # extra input for inpainting 
             inpainting_extra_input = None
             if self.config.inpaint_mode:
@@ -443,7 +442,7 @@ class Trainer:
                           inpainting_extra_input=inpainting_extra_input,
                           grounding_input=grounding_input )
             samples = plms_sampler.sample(S=50, shape=shape, input=input, uc=uc, guidance_scale=5)
-            
+
             autoencoder_wo_wrapper = self.autoencoder # Note itself is without wrapper since we do not train that. 
             samples = autoencoder_wo_wrapper.decode(samples).cpu()
 
@@ -458,7 +457,10 @@ class Trainer:
         )
         if self.config.enable_ema:
             ckpt["ema"] = self.ema.state_dict()
-        torch.save( ckpt, os.path.join(self.name, "checkpoint_"+str(iter_name).zfill(8)+".pth") )
+        torch.save(
+            ckpt,
+            os.path.join(self.name, f"checkpoint_{str(iter_name).zfill(8)}.pth"),
+        )
         torch.save( ckpt, os.path.join(self.name, "checkpoint_latest.pth") )
 
 

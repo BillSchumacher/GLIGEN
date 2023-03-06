@@ -13,9 +13,7 @@ import random
 
 def check_unique(images, fields):
     for field in fields:
-        temp_list = []
-        for img_info in images:
-            temp_list.append(img_info[field])
+        temp_list = [img_info[field] for img_info in images]
         assert len(set(temp_list)) == len(temp_list), field
 
 def clean_data(data):
@@ -142,12 +140,8 @@ class GroundingDataset(BaseDataset):
         if self.max_boxes_per_data > 99:
             assert False, "Are you sure setting such large number of boxes?"
 
-        out = {}
-
         data_id = self.data_id_list[index]
-        out['id'] = data_id
-        
-
+        out = {'id': data_id}
         # Image and caption 
         file_name = self.data[data_id]['file_name']
         image = self.fetch_image(file_name)
@@ -159,7 +153,7 @@ class GroundingDataset(BaseDataset):
         else:
             out["caption"] = ""
 
-        
+
 
         annos = deepcopy(self.data_id_to_annos[data_id])
         areas = []
@@ -178,9 +172,9 @@ class GroundingDataset(BaseDataset):
                 all_boxes.append( torch.tensor([x0,y0,x1,y1]) / self.image_size ) # scale to 0-1
                 all_masks.append(1)
                 all_positive_embeddings.append( torch.load(os.path.join(self.annotation_embedding_path,str(anno["id"])), map_location='cpu'  )  )
-                
+
         wanted_idxs = torch.tensor(areas).sort(descending=True)[1]
-        wanted_idxs = wanted_idxs[0:self.max_boxes_per_data]
+        wanted_idxs = wanted_idxs[:self.max_boxes_per_data]
 
         boxes = torch.zeros(self.max_boxes_per_data, 4)
         masks = torch.zeros(self.max_boxes_per_data)
@@ -194,7 +188,7 @@ class GroundingDataset(BaseDataset):
         out["boxes"] = boxes
         out["masks"] = masks
         out["positive_embeddings"] = positive_embeddings      
-        
+
         return out
 
 

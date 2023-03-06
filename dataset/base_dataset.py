@@ -66,9 +66,9 @@ def recalculate_box_and_verify_if_valid(x, y, w, h, trans_info, image_size, min_
     image_size:  what is the final image size  
     """
 
-    x0 = x * trans_info["performed_scale"] - trans_info['crop_x'] 
-    y0 = y * trans_info["performed_scale"] - trans_info['crop_y'] 
-    x1 = (x + w) * trans_info["performed_scale"] - trans_info['crop_x'] 
+    x0 = x * trans_info["performed_scale"] - trans_info['crop_x']
+    y0 = y * trans_info["performed_scale"] - trans_info['crop_y']
+    x1 = (x + w) * trans_info["performed_scale"] - trans_info['crop_x']
     y1 = (y + h) * trans_info["performed_scale"] - trans_info['crop_y'] 
 
 
@@ -78,11 +78,8 @@ def recalculate_box_and_verify_if_valid(x, y, w, h, trans_info, image_size, min_
     # region, then we will consider this is an invalid box. 
     valid, (x0, y0, x1, y1) = to_valid(x0, y0, x1, y1, image_size, min_box_size)
 
-    if valid:
-        # we also perform random flip. 
-        # Here boxes are valid, and are based on image_size 
-        if trans_info["performed_flip"]:
-            x0, x1 = image_size-x1, image_size-x0
+    if valid and trans_info["performed_flip"]:
+        x0, x1 = image_size-x1, image_size-x0
 
     return valid, (x0, y0, x1, y1)
 
@@ -104,8 +101,7 @@ class BaseDataset(torch.utils.data.Dataset):
         pid = multiprocessing.current_process().pid # get pid of this process.
         if pid not in self.zip_dict:
             self.zip_dict[pid] = ZipFile(ziproot)
-        zip_file = self.zip_dict[pid]
-        return zip_file
+        return self.zip_dict[pid]
 
 
     def vis_getitem_data(self, index=None, out=None, return_tensor=False, name="res.jpg", print_caption=True):

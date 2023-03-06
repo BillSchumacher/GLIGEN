@@ -37,9 +37,7 @@ def make_a_sentence(obj_names, clean=False):
 		tokens_positive.append(
 			[[start_len, end_len]] # in real caption, positive tokens can be disjoint, thus using list of list
 		)
-	caption = caption[:-2] # remove last ", "
-
-	return caption #, tokens_positive
+	return caption[:-2]
 
 
 class LayoutDataset(BaseDataset):
@@ -178,13 +176,10 @@ class LayoutDataset(BaseDataset):
 		if self.max_boxes_per_image > 99:
 			assert False, "Are you sure setting such large number of boxes?"
 
-		out = {}
-
 		image_id = self.image_ids[index]
-		out['id'] = image_id
-
+		out = {'id': image_id}
 		flip = self.random_flip and random.random()<0.5
-		
+
 		# Image 
 		filename = self.image_id_to_filename[image_id]
 		zip_file = self.fetch_zipfile(self.image_root)
@@ -219,8 +214,8 @@ class LayoutDataset(BaseDataset):
 			caption = ""
 		else:
 			caption = make_a_sentence(obj_names, clean=True)
-	
-		out["caption"] = caption	
+
+		out["caption"] = caption
 		out["boxes"] = boxes
 		out["masks"] = masks
 		out["positive_embeddings"] = positive_embeddings

@@ -128,7 +128,7 @@ def generate_stroke_mask(im_size, max_parts=10, maxVertex=20, maxLength=100, min
     assert minBrushWidth<=maxBrushWidth
     mask = np.zeros((im_size[0], im_size[1], 1), dtype=np.float32)
     parts = random.randint(1, max_parts)
-    for i in range(parts):
+    for _ in range(parts):
         mask = mask + np_free_form_mask(maxVertex, maxLength, minBrushWidth, maxBrushWidth, maxAngle, im_size[0], im_size[1])
     mask = np.minimum(mask, 1.0)
     # mask = np.concatenate([mask, mask, mask], axis = 2)

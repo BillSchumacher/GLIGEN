@@ -63,8 +63,7 @@ def imagenet_deprocess_batch(imgs, rescale=True):
     img_de = deprocess_fn(imgs[i])[None]
     img_de = img_de.mul(255).clamp(0, 255).byte()
     imgs_de.append(img_de)
-  imgs_de = torch.cat(imgs_de, dim=0)
-  return imgs_de
+  return torch.cat(imgs_de, dim=0)
 
 
 class Resize(object):
@@ -81,9 +80,7 @@ class Resize(object):
 
 
 def unpack_var(v):
-  if isinstance(v, torch.autograd.Variable):
-    return v.data
-  return v
+  return v.data if isinstance(v, torch.autograd.Variable) else v
 
 
 def split_graph_batch(triples, obj_data, obj_to_img, triple_to_img):

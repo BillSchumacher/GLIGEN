@@ -29,8 +29,7 @@ def parse_option():
     parser.add_argument("--load-text-box-generation", type=arg_bool, default=True, help="Load text-box generation pipeline.")
     parser.add_argument("--load-text-box-inpainting", type=arg_bool, default=False, help="Load text-box inpainting pipeline.")
     parser.add_argument("--load-text-image-box-generation", type=arg_bool, default=False, help="Load text-image-box generation pipeline.")
-    args = parser.parse_args()
-    return args
+    return parser.parse_args()
 args = parse_option()
 
 
@@ -152,14 +151,14 @@ def inference(task, language_instruction, grounding_instruction, inpainting_boxe
         phrase_list.append(k)
         location_list.append(v)
 
-    placeholder_image = Image.open('images/teddy.jpg').convert("RGB")    
+    placeholder_image = Image.open('images/teddy.jpg').convert("RGB")
     image_list = [placeholder_image] * len(phrase_list) # placeholder input for visual prompt, which is disabled
 
     batch_size = int(batch_size)
     if not 1 <= batch_size <= 4:
         batch_size = 2
 
-    if style_image == None:
+    if style_image is None:
         has_text_mask = 1 
         has_image_mask = 0 # then we hack above 'image_list' 
     else:
@@ -170,7 +169,7 @@ def inference(task, language_instruction, grounding_instruction, inpainting_boxe
 
         image_list = [placeholder_image]*valid_phrase_len + [style_image]
         has_image_mask = [0]*valid_phrase_len + [1]
-        
+
         location_list += [ [0.0, 0.0, 1, 0.01]  ] # style image grounding location
 
     if task == 'Grounded Inpainting':
@@ -195,7 +194,7 @@ def inference(task, language_instruction, grounding_instruction, inpainting_boxe
 
     with torch.autocast(device_type='cuda', dtype=torch.float16):
         if task == 'Grounded Generation':
-            if style_image == None:
+            if style_image is None:
                 return grounded_generation_box(loaded_model_list, instruction, *args, **kwargs)
             else:
                 return grounded_generation_box(loaded_model_list_style, instruction, *args, **kwargs)
@@ -222,10 +221,7 @@ def draw_box(boxes=[], texts=[], img=None):
     return img
 
 def get_concat(ims):
-    if len(ims) == 1:
-        n_col = 1
-    else:
-        n_col = 2
+    n_col = 1 if len(ims) == 1 else 2
     n_row = math.ceil(len(ims) / 2)
     dst = Image.new('RGB', (ims[0].width * n_col, ims[0].height * n_row), color="white")
     for i, im in enumerate(ims):
@@ -238,7 +234,7 @@ def get_concat(ims):
 def auto_append_grounding(language_instruction, grounding_texts):
     for grounding_text in grounding_texts:
         if grounding_text not in language_instruction and grounding_text != 'auto':
-            language_instruction += "; " + grounding_text
+            language_instruction += f"; {grounding_text}"
     print(language_instruction)
     return language_instruction
 
@@ -256,7 +252,7 @@ def generate(task, language_instruction, grounding_texts, sketch_pad,
     grounding_texts = [x.strip() for x in grounding_texts.split(';')]
     assert len(boxes) == len(grounding_texts)
     boxes = (np.asarray(boxes) / 512).tolist()
-    grounding_instruction = json.dumps({obj: box for obj,box in zip(grounding_texts, boxes)})
+    grounding_instruction = json.dumps(dict(zip(grounding_texts, boxes)))
 
     image = None
     actual_mask = None
@@ -276,7 +272,7 @@ def generate(task, language_instruction, grounding_texts, sketch_pad,
             boxes = np.asarray(boxes) * 0.9 + 0.05
             boxes = boxes.tolist()
             grounding_instruction = json.dumps({obj: box for obj,box in zip(grounding_texts, boxes) if obj != 'auto'})
-    
+
     if append_grounding:
         language_instruction = auto_append_grounding(language_instruction, grounding_texts)
 
@@ -292,13 +288,20 @@ def generate(task, language_instruction, grounding_texts, sketch_pad,
             hw = min(*state['original_image'].shape[:2])
             gen_image = sized_center_fill(state['original_image'].copy(), np.array(gen_image.resize((hw, hw))), hw, hw)
             gen_image = Image.fromarray(gen_image)
-        
+
         gen_images[idx] = gen_image
 
     blank_samples = batch_size % 2 if batch_size > 1 else 0
-    gen_images = [gr.Image.update(value=x, visible=True) for i,x in enumerate(gen_images)] \
-                    + [gr.Image.update(value=None, visible=True) for _ in range(blank_samples)] \
-                    + [gr.Image.update(value=None, visible=False) for _ in range(4 - batch_size - blank_samples)]
+    gen_images = (
+        [gr.Image.update(value=x, visible=True) for x in gen_images]
+        + [
+            gr.Image.update(value=None, visible=True)
+            for _ in range(blank_samples)
+        ]
+    ) + [
+        gr.Image.update(value=None, visible=False)
+        for _ in range(4 - batch_size - blank_samples)
+    ]
 
     return gen_images + [state]
 
@@ -383,11 +386,7 @@ def draw(task, input, grounding_texts, new_image_trigger, state):
     if mask.sum() == 0 and task != "Grounded Inpainting":
         state = {}
 
-    if task != 'Grounded Inpainting':
-        image = None
-    else:
-        image = Image.fromarray(image)
-
+    image = None if task != 'Grounded Inpainting' else Image.fromarray(image)
     if 'boxes' not in state:
         state['boxes'] = []
 
@@ -431,9 +430,16 @@ def clear(task, sketch_pad_trigger, batch_size, state, switch_task=False):
     if task != 'Grounded Inpainting':
         sketch_pad_trigger = sketch_pad_trigger + 1
     blank_samples = batch_size % 2 if batch_size > 1 else 0
-    out_images = [gr.Image.update(value=None, visible=True) for i in range(batch_size)] \
-                    + [gr.Image.update(value=None, visible=True) for _ in range(blank_samples)] \
-                    + [gr.Image.update(value=None, visible=False) for _ in range(4 - batch_size - blank_samples)]
+    out_images = (
+        [gr.Image.update(value=None, visible=True) for _ in range(batch_size)]
+        + [
+            gr.Image.update(value=None, visible=True)
+            for _ in range(blank_samples)
+        ]
+    ) + [
+        gr.Image.update(value=None, visible=False)
+        for _ in range(4 - batch_size - blank_samples)
+    ]
     state = {}
     return [None, sketch_pad_trigger, None, 1.0] + out_images + [state]
 
@@ -609,10 +615,7 @@ with Blocks(
                 return image_mask, state
             
             def switch_task_hide_cond(self, task):
-                cond = False
-                if task == "Grounded Generation":
-                    cond = True
-
+                cond = task == "Grounded Generation"
                 return gr.Checkbox.update(visible=cond, value=False), gr.Image.update(value=None, visible=False), gr.Slider.update(visible=cond), gr.Checkbox.update(visible=(not cond), value=False)
 
         controller = Controller()
