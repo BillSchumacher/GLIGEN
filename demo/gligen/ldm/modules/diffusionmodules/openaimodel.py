@@ -395,13 +395,11 @@ class UNetModel(nn.Module):
             device = input["x"].device
             boxes = th.zeros(batch, self.max_box, 4,).type(dtype).to(device) 
             masks = th.zeros(batch, self.max_box).type(dtype).to(device) 
-            text_embeddings = th.zeros(batch, self.max_box, self.positive_len).type(dtype).to(device) 
+            text_embeddings = th.zeros(batch, self.max_box, self.positive_len).type(dtype).to(device)
         if self.training and random.random() < 0.1: # random drop for guidance  
             boxes, masks, text_embeddings = boxes*0, masks*0, text_embeddings*0
-  
-        objs = self.position_net( boxes, masks, text_embeddings ) # B*N*C 
 
-        return objs
+        return self.position_net( boxes, masks, text_embeddings )
 
 
     
@@ -427,7 +425,7 @@ class UNetModel(nn.Module):
             image_masks = th.zeros(batch, self.max_box).type(dtype).to(device) 
             text_embeddings =  th.zeros(batch, self.max_box, self.positive_len).type(dtype).to(device) 
             image_embeddings = th.zeros(batch, self.max_box, self.positive_len).type(dtype).to(device) 
-        
+
         if self.training and random.random() < 0.1: # random drop for guidance  
             boxes = boxes*0
             masks = masks*0
@@ -435,10 +433,15 @@ class UNetModel(nn.Module):
             image_masks = image_masks*0
             text_embeddings = text_embeddings*0
             image_embeddings = image_embeddings*0
-  
-        objs = self.position_net( boxes, masks, text_masks, image_masks, text_embeddings, image_embeddings ) # B*N*C 
-        
-        return objs
+
+        return self.position_net(
+            boxes,
+            masks,
+            text_masks,
+            image_masks,
+            text_embeddings,
+            image_embeddings,
+        )
 
 
 

@@ -18,17 +18,17 @@ def chunks(lst, n):
 
 
 def clean_kps(kps):
-	assert len(kps) == 51
-	kps = list(chunks(kps, 3))
-	out = []
-	for idx, kp in enumerate(kps):
-		name = "kp"+str(idx).zfill(2)
-		loc = [kp[0], kp[1]]
-		valid = True if kp[2] == 2 else False 
-		if not valid:
-			loc = [0,0]
-		out.append(  {"name":name, "loc":loc, "valid":valid}          )
-	return out
+    assert len(kps) == 51
+    kps = list(chunks(kps, 3))
+    out = []
+    for idx, kp in enumerate(kps):
+        name = f"kp{str(idx).zfill(2)}"
+        loc = [kp[0], kp[1]]
+        valid = kp[2] == 2
+        if not valid:
+        	loc = [0,0]
+        out.append(  {"name":name, "loc":loc, "valid":valid}          )
+    return out
 
 
 def norm_kps(kps, image_size):
@@ -135,61 +135,59 @@ class KeypointDataset(BaseDataset):
 
 
 	def __getitem__(self, index):
-		if self.max_persons_per_image > 99:
-			assert False, "Are you sure setting such large number of boxes?"
-		
-		out = {}
+	    if self.max_persons_per_image > 99:
+	    	assert False, "Are you sure setting such large number of boxes?"
 
-		image_id = self.image_ids[index]
-		out['id'] = image_id
-		#image_id = 18150 #180560 
-		# Image 
-		filename = self.image_id_to_filename[image_id]
-		image = Image.open( os.path.join(self.image_root,filename) ).convert('RGB')
-		image_tensor, trans_info = self.transform_image(image)
-		out["image"] = image_tensor
-		
-		
-		# Select valid boxes after cropping (center or random)
-		this_image_obj_annos = deepcopy(self.image_id_to_objects[image_id])
-		areas = []
-		all_kps = []
-		for object_anno in this_image_obj_annos:
-			
-			x, y, w, h = object_anno['bbox']
-			kps = clean_kps( object_anno['keypoints'] )
-			valid, (x0, y0, x1, y1), kps = recalculate_box_kps_and_verify_if_valid(x, y, w, h, kps, trans_info, self.image_size, self.min_box_size)
-
-			if valid:
-				areas.append(  (x1-x0)*(y1-y0) )
-				all_kps.append( norm_kps(kps, self.image_size) ) 
+	    image_id = self.image_ids[index]
+	    out = {'id': image_id}
+	    #image_id = 18150 #180560 
+	    # Image 
+	    filename = self.image_id_to_filename[image_id]
+	    image = Image.open( os.path.join(self.image_root,filename) ).convert('RGB')
+	    image_tensor, trans_info = self.transform_image(image)
+	    out["image"] = image_tensor
 
 
-		wanted_idxs = torch.tensor(areas).sort(descending=True)[1]
-		wanted_idxs = wanted_idxs[0:self.max_persons_per_image]
-		points = torch.zeros(self.max_persons_per_image*17,2)
-		masks = torch.zeros(self.max_persons_per_image*17)
-		i = 0 
-		for idx in wanted_idxs:
-			kps = all_kps[idx]
-			for kp in kps:
-				points[i] = torch.tensor( kp['loc'] )
-				masks[i] = 1 if kp["valid"] else 0 
-				i += 1 
-	
-		# Caption
-		if random.uniform(0, 1) < self.prob_real_caption:
-			caption_data = self.image_id_to_captions[image_id]
-			idx = random.randint(0,  len(caption_data)-1 )
-			caption = caption_data[idx]["caption"]
-		else:
-			caption = ""
+	    # Select valid boxes after cropping (center or random)
+	    this_image_obj_annos = deepcopy(self.image_id_to_objects[image_id])
+	    areas = []
+	    all_kps = []
+	    for object_anno in this_image_obj_annos:
 
-		out["caption"] = caption
-		out["points"] = points
-		out["masks"] = masks
+	    	x, y, w, h = object_anno['bbox']
+	    	kps = clean_kps( object_anno['keypoints'] )
+	    	valid, (x0, y0, x1, y1), kps = recalculate_box_kps_and_verify_if_valid(x, y, w, h, kps, trans_info, self.image_size, self.min_box_size)
 
-		return out 
+	    	if valid:
+	    		areas.append(  (x1-x0)*(y1-y0) )
+	    		all_kps.append( norm_kps(kps, self.image_size) ) 
+
+
+	    wanted_idxs = torch.tensor(areas).sort(descending=True)[1]
+	    wanted_idxs = wanted_idxs[:self.max_persons_per_image]
+	    points = torch.zeros(self.max_persons_per_image*17,2)
+	    masks = torch.zeros(self.max_persons_per_image*17)
+	    i = 0
+	    for idx in wanted_idxs:
+	    	kps = all_kps[idx]
+	    	for kp in kps:
+	    		points[i] = torch.tensor( kp['loc'] )
+	    		masks[i] = 1 if kp["valid"] else 0 
+	    		i += 1 
+
+	    # Caption
+	    if random.uniform(0, 1) < self.prob_real_caption:
+	    	caption_data = self.image_id_to_captions[image_id]
+	    	idx = random.randint(0,  len(caption_data)-1 )
+	    	caption = caption_data[idx]["caption"]
+	    else:
+	    	caption = ""
+
+	    out["caption"] = caption
+	    out["points"] = points
+	    out["masks"] = masks
+
+	    return out 
 
 
 	def __len__(self):

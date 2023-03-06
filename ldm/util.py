@@ -11,7 +11,7 @@ def log_txt_as_img(wh, xc, size=10):
     # wh a tuple of (width, height)
     # xc a list of captions to plot
     b = len(xc)
-    txts = list()
+    txts = []
     for bi in range(b):
         txt = Image.new("RGB", wh, color="white")
         draw = ImageDraw.Draw(txt)
@@ -32,15 +32,19 @@ def log_txt_as_img(wh, xc, size=10):
 
 
 def ismap(x):
-    if not isinstance(x, torch.Tensor):
-        return False
-    return (len(x.shape) == 4) and (x.shape[1] > 3)
+    return (
+        (len(x.shape) == 4) and (x.shape[1] > 3)
+        if isinstance(x, torch.Tensor)
+        else False
+    )
 
 
 def isimage(x):
-    if not isinstance(x,torch.Tensor):
-        return False
-    return (len(x.shape) == 4) and (x.shape[1] == 3 or x.shape[1] == 1)
+    return (
+        len(x.shape) == 4 and x.shape[1] in [3, 1]
+        if isinstance(x, torch.Tensor)
+        else False
+    )
 
 
 def exists(x):

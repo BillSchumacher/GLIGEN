@@ -40,8 +40,7 @@ class AutoencoderKL(nn.Module):
     def decode(self, z):
         z = 1. / self.scale_factor * z
         z = self.post_quant_conv(z)
-        dec = self.decoder(z)
-        return dec
+        return self.decoder(z)
 
 
 

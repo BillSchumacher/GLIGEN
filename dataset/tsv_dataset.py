@@ -41,9 +41,7 @@ def decode_item(item):
 
 def check_unique(images, fields):
     for field in fields:
-        temp_list = []
-        for img_info in images:
-            temp_list.append(img_info[field])
+        temp_list = [img_info[field] for img_info in images]
         assert len(set(temp_list)) == len(temp_list), field
 
 def clean_data(data):
@@ -92,9 +90,7 @@ def make_a_sentence(obj_names, clean=False):
         tokens_positive.append(
             [[start_len, end_len]] # in real caption, positive tokens can be disjoint, thus using list of list
         )
-    caption = caption[:-2] # remove last ", "
-
-    return caption #, tokens_positive
+    return caption[:-2]
 
 
 def mask_for_random_drop_text_or_image_feature(masks, random_drop_embedding):
@@ -204,8 +200,7 @@ class TSVDataset(BaseDataset):
 
     def get_item_from_tsv(self, index):
         _, item = self.tsv_file[index]
-        item = decode_item(item)
-        return item
+        return decode_item(item)
 
     def mapping(self, image_embedding):
         if self.which_layer_image == 'after':
@@ -230,10 +225,8 @@ class TSVDataset(BaseDataset):
         raw_item = self.get_item_from_tsv(index)
         is_det = raw_item.get('is_det', False) # if it is from detection (such as o365), then we will make a pseudo caption
 
-        out = {}
+        out = {'id': raw_item['data_id']}
 
-        # -------------------- id and image ------------------- # 
-        out['id'] = raw_item['data_id']
         image = raw_item['image']
         image_tensor, trans_info = self.transform_image(image)
         out["image"] = image_tensor
@@ -242,7 +235,7 @@ class TSVDataset(BaseDataset):
 
         # -------------------- grounding token ------------------- # 
         annos = raw_item['annos']
-        
+
         areas = []
         all_boxes = []
         all_masks = []
@@ -269,7 +262,7 @@ class TSVDataset(BaseDataset):
 
         # Sort according to area and choose the largest N objects   
         wanted_idxs = torch.tensor(areas).sort(descending=True)[1]
-        wanted_idxs = wanted_idxs[0:self.max_boxes_per_data]
+        wanted_idxs = wanted_idxs[:self.max_boxes_per_data]
 
         boxes = torch.zeros(self.max_boxes_per_data, 4)
         masks = torch.zeros(self.max_boxes_per_data)
@@ -296,9 +289,9 @@ class TSVDataset(BaseDataset):
         out["masks"] = masks # indicating how many valid objects for this image-text data
         out["image_masks"] = image_masks # indicating how many objects still there after random dropping applied
         out["text_masks"] = text_masks # indicating how many objects still there after random dropping applied
-        out["text_embeddings"] =  text_embeddings  
+        out["text_embeddings"] =  text_embeddings
         out["image_embeddings"] = image_embeddings      
-        
+
 
 
         # -------------------- caption ------------------- # 

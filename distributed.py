@@ -10,10 +10,7 @@ def get_rank():
     if not dist.is_available():
         return 0
 
-    if not dist.is_initialized():
-        return 0
-
-    return dist.get_rank()
+    return dist.get_rank() if dist.is_initialized() else 0
 
 
 def synchronize():
@@ -32,9 +29,7 @@ def synchronize():
 def get_world_size():
     if not dist.is_available():
         return 1
-    if not dist.is_initialized():
-        return 1
-    return dist.get_world_size()
+    return dist.get_world_size() if dist.is_initialized() else 1
 
 
 def reduce_sum(tensor):
@@ -78,10 +73,9 @@ def all_gather(data):
     size_list = [int(size.item()) for size in size_list]
     max_size = max(size_list)
 
-    tensor_list = []
-    for _ in size_list:
-        tensor_list.append(torch.ByteTensor(size=(max_size,)).to('cuda'))
-
+    tensor_list = [
+        torch.ByteTensor(size=(max_size,)).to('cuda') for _ in size_list
+    ]
     if local_size != max_size:
         padding = torch.ByteTensor(size=(max_size - local_size,)).to('cuda')
         tensor = torch.cat((tensor, padding), 0)
@@ -117,6 +111,6 @@ def reduce_loss_dict(loss_dict):
         if dist.get_rank() == 0:
             losses /= world_size
 
-        reduced_losses = {k: v for k, v in zip(keys, losses)}
+        reduced_losses = dict(zip(keys, losses))
 
     return reduced_losses

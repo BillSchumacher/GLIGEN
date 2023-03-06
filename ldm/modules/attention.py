@@ -49,10 +49,11 @@ class FeedForward(nn.Module):
         super().__init__()
         inner_dim = int(dim * mult)
         dim_out = default(dim_out, dim)
-        project_in = nn.Sequential(
-            nn.Linear(dim, inner_dim),
-            nn.GELU()
-        ) if not glu else GEGLU(dim, inner_dim)
+        project_in = (
+            GEGLU(dim, inner_dim)
+            if glu
+            else nn.Sequential(nn.Linear(dim, inner_dim), nn.GELU())
+        )
 
         self.net = nn.Sequential(
             project_in,
@@ -294,8 +295,18 @@ class SpatialTransformer(nn.Module):
                                  padding=0)
 
         self.transformer_blocks = nn.ModuleList(
-            [BasicTransformerBlock(query_dim, key_dim, value_dim, n_heads, d_head, fuser_type, use_checkpoint=use_checkpoint)
-                for d in range(depth)]
+            [
+                BasicTransformerBlock(
+                    query_dim,
+                    key_dim,
+                    value_dim,
+                    n_heads,
+                    d_head,
+                    fuser_type,
+                    use_checkpoint=use_checkpoint,
+                )
+                for _ in range(depth)
+            ]
         )
 
         self.proj_out = zero_module(nn.Conv2d(query_dim,

@@ -44,7 +44,7 @@ class PositionNet(nn.Module):
         # embedding position (it may includes padding as placeholder)
         xy_embedding = self.fourier_embedder(points) # B*N*2 --> B*N*C
 
-        
+
         # learnable null embedding 
         person_null = self.null_person_feature.view(1,1,-1)
         xy_null =  self.null_xy_feature.view(1,1,-1)
@@ -53,9 +53,7 @@ class PositionNet(nn.Module):
         person_embeddings = person_embeddings*masks + (1-masks)*person_null
         xy_embedding = xy_embedding*masks + (1-masks)*xy_null
 
-        objs = self.linears(  torch.cat([person_embeddings, xy_embedding], dim=-1)  )
-      
-        return objs
+        return self.linears(  torch.cat([person_embeddings, xy_embedding], dim=-1)  )
 
 
 

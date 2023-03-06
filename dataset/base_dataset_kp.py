@@ -30,17 +30,15 @@ def check_filenames_in_zipdata(filenames, ziproot):
 
 def draw_points(img, points):
     colors = ["red", "yellow", "blue", "green", "orange", "brown", "cyan", "purple", "deeppink", "coral", "gold", "darkblue", "khaki", "lightgreen", "snow", "yellowgreen", "lime"]
-    colors = colors * 100
+    colors *= 100
     draw = ImageDraw.Draw(img)
-    
+
     r = 3
     for point, color in zip(points, colors):
-        if point[0] == point[1] == 0:
-            pass 
-        else:
+        if not point[0] == point[1] == 0:
             x, y = float(point[0]), float(point[1])
             draw.ellipse( [ (x-r,y-r), (x+r,y+r) ], fill=color   )
-        # draw.rectangle([box[0], box[1], box[2], box[3]], outline ="red", width=2) # x0 y0 x1 y1 
+            # draw.rectangle([box[0], box[1], box[2], box[3]], outline ="red", width=2) # x0 y0 x1 y1 
     return img 
 
 
@@ -72,7 +70,7 @@ def to_valid(x0, y0, x1, y1, kps, image_size, min_box_size):
                 kp['valid'] = False
                 kp["loc"] = [0,0]
 
-    if all([ not kp["valid"] for kp in kps  ]):
+    if all(not kp["valid"] for kp in kps):
         valid = False # all kps were cropped but box is still valid (It's unlikely though)
         return valid, (None,None,None,None), None
 
@@ -90,9 +88,9 @@ def recalculate_box_kps_and_verify_if_valid(x, y, w, h, kps, trans_info, image_s
     trans_info: what resizing and cropping have been applied to the raw image 
     image_size:  what is the final image size  
     """
-    x0 = x * trans_info["performed_scale"] - trans_info['crop_x'] 
-    y0 = y * trans_info["performed_scale"] - trans_info['crop_y'] 
-    x1 = (x + w) * trans_info["performed_scale"] - trans_info['crop_x'] 
+    x0 = x * trans_info["performed_scale"] - trans_info['crop_x']
+    y0 = y * trans_info["performed_scale"] - trans_info['crop_y']
+    x1 = (x + w) * trans_info["performed_scale"] - trans_info['crop_x']
     y1 = (y + h) * trans_info["performed_scale"] - trans_info['crop_y'] 
 
 
@@ -102,7 +100,7 @@ def recalculate_box_kps_and_verify_if_valid(x, y, w, h, kps, trans_info, image_s
             kp_x = kp_x * trans_info["performed_scale"] - trans_info['crop_x']
             kp_y = kp_y * trans_info["performed_scale"] - trans_info['crop_y'] 
             kp["loc"] = [kp_x, kp_y]
-               
+
 
     # at this point, box annotation has been recalculated based on scaling and cropping
     # but some point may fall off the image_size region (e.g., negative value), thus we 
@@ -110,15 +108,12 @@ def recalculate_box_kps_and_verify_if_valid(x, y, w, h, kps, trans_info, image_s
     # region, then we will consider this is an invalid box. 
     valid, (x0, y0, x1, y1), kps = to_valid(x0, y0, x1, y1, kps, image_size, min_box_size)
 
-    if valid:
-        # we also perform random flip. 
-        # Here boxes are valid, and are based on image_size 
-        if trans_info["performed_flip"]:
-            x0, x1 = image_size-x1, image_size-x0
-            for kp in kps:
-                if kp["valid"]:
-                    kp_x, kp_y = kp["loc"] 
-                    kp["loc"] = [image_size-kp_x, kp_y]
+    if valid and trans_info["performed_flip"]:
+        x0, x1 = image_size-x1, image_size-x0
+        for kp in kps:
+            if kp["valid"]:
+                kp_x, kp_y = kp["loc"] 
+                kp["loc"] = [image_size-kp_x, kp_y]
 
     return valid, (x0, y0, x1, y1), kps
 
@@ -140,8 +135,7 @@ class BaseDataset(torch.utils.data.Dataset):
         pid = multiprocessing.current_process().pid # get pid of this process.
         if pid not in self.zip_dict:
             self.zip_dict[pid] = ZipFile(ziproot)
-        zip_file = self.zip_dict[pid]
-        return zip_file
+        return self.zip_dict[pid]
 
 
     def vis_getitem_data(self, index, name="res.png"):

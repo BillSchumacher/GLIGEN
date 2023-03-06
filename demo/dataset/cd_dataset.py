@@ -14,10 +14,7 @@ from io import BytesIO
 
 
 def not_in_at_all(list1, list2):
-	for a in list1:
-		if a in list2:
-			return False
-	return True
+	return all(a not in list2 for a in list1)
 
 
 def clean_annotations(annotations):
@@ -43,9 +40,7 @@ def make_a_sentence(obj_names, clean=False):
 		tokens_positive.append(
 			[[start_len, end_len]] # in real caption, positive tokens can be disjoint, thus using list of list
 		)
-	caption = caption[:-2] # remove last ", "
-
-	return caption #, tokens_positive
+	return caption[:-2]
 
 
 def check_all_have_same_images(instances_data, stuff_data, caption_data):
@@ -157,10 +152,10 @@ class CDDataset(BaseDataset):
 
 	def select_objects(self, annotations):
 		for object_anno in annotations:
-			image_id = object_anno['image_id']
 			object_name = self.object_idx_to_name[object_anno['category_id']]
 			other_ok = object_name != 'other' or self.include_other
 			if other_ok:
+				image_id = object_anno['image_id']
 				self.image_id_to_objects[image_id].append(object_anno)
 
 
@@ -178,18 +173,15 @@ class CDDataset(BaseDataset):
 		if self.max_boxes_per_image > 99:
 			assert False, "Are you sure setting such large number of boxes?"
 
-		out = {}
-
 		image_id = self.image_ids[index]
-		out['id'] = image_id
-		
+		out = {'id': image_id}
 		# Image 
 		filename = self.image_id_to_filename[image_id]
 		image = self.fetch_image(filename)
 		#WW, HH = image.size
 		image_tensor, trans_info = self.transform_image(image)
 		out["image"] = image_tensor
-	
+
 
 		# Select valid boxes after cropping (center or random)
 		this_image_obj_annos = deepcopy(self.image_id_to_objects[image_id])
@@ -212,7 +204,7 @@ class CDDataset(BaseDataset):
 				all_positive_embeddings.append( self.category_embeddings[obj_name]  )
 
 		wanted_idxs = torch.tensor(areas).sort(descending=True)[1]
-		wanted_idxs = wanted_idxs[0:self.max_boxes_per_image]
+		wanted_idxs = wanted_idxs[:self.max_boxes_per_image]
 		obj_names = [] # used for making a sentence
 		boxes = torch.zeros(self.max_boxes_per_image, 4)
 		masks = torch.zeros(self.max_boxes_per_image)
@@ -228,13 +220,12 @@ class CDDataset(BaseDataset):
 			caption_data = self.image_id_to_captions[image_id]
 			idx = random.randint(0,  len(caption_data)-1 )
 			caption = caption_data[idx]["caption"]
+		elif self.fake_caption_type == "empty":
+			caption = ""
 		else:
-			if self.fake_caption_type == "empty":
-				caption = ""
-			else:
-				caption = make_a_sentence(obj_names, clean=True)
-		
-		
+			caption = make_a_sentence(obj_names, clean=True)
+
+
 		out["caption"] = caption
 		out["boxes"] = boxes
 		out["masks"] = masks

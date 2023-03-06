@@ -21,8 +21,7 @@ class FourierEmbedder():
         "x: arbitrary shape of tensor. dim: cat dim"
         out = []
         for freq in self.freq_bands:
-            out.append( torch.sin( freq*x ) )
-            out.append( torch.cos( freq*x ) )
+            out.extend((torch.sin( freq*x ), torch.cos( freq*x )))
         return torch.cat(out, cat_dim)
 
 

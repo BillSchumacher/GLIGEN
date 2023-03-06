@@ -34,10 +34,10 @@ class ImageCaptionSaver:
 
     def __call__(self, images, real, captions, seen):
         
-        save_path = os.path.join(self.base_path, str(seen).zfill(8)+'.png')
+        save_path = os.path.join(self.base_path, f'{str(seen).zfill(8)}.png')
         torchvision.utils.save_image( images, save_path, nrow=self.nrow, normalize=self.normalize, scale_each=self.scale_each, range=self.range )
-        
-        save_path = os.path.join(self.base_path, str(seen).zfill(8)+'_real.png')
+
+        save_path = os.path.join(self.base_path, f'{str(seen).zfill(8)}_real.png')
         torchvision.utils.save_image( real, save_path, nrow=self.nrow)
 
         assert images.shape[0] == len(captions)
@@ -52,15 +52,15 @@ class ImageCaptionSaver:
 
 
 def read_official_ckpt(ckpt_path):      
-    "Read offical pretrained ckpt and convert into my style" 
+    "Read offical pretrained ckpt and convert into my style"
     state_dict = torch.load(ckpt_path, map_location="cpu")["state_dict"]
-    out = {}
-    out["model"] = {}
-    out["text_encoder"] = {}
-    out["autoencoder"] = {}
-    out["unexpected"] = {}
-    out["diffusion"] = {}
-
+    out = {
+        "model": {},
+        "text_encoder": {},
+        "autoencoder": {},
+        "unexpected": {},
+        "diffusion": {},
+    }
     for k,v in state_dict.items():
         if k.startswith('model.diffusion_model'):
             out["model"][k.replace("model.diffusion_model.", "")] = v 
@@ -71,7 +71,7 @@ def read_official_ckpt(ckpt_path):
         elif k in ["model_ema.decay", "model_ema.num_updates"]:
             out["unexpected"][k] = v  
         else:
-            out["diffusion"][k] = v     
+            out["diffusion"][k] = v
     return out 
 
 
@@ -83,17 +83,16 @@ def batch_to_device(batch, device):
 
 
 def sub_batch(batch, num=1):
-    # choose first num in given batch 
-    num = num if num > 1 else 1 
+    # choose first num in given batch
+    num = max(num, 1)
     for k in batch:
-        batch[k] = batch[k][0:num]
+        batch[k] = batch[k][:num]
     return batch
 
 
 def wrap_loader(loader):
     while True:
-        for batch in loader:  # TODO: it seems each time you have the same order for all epoch?? 
-            yield batch
+        yield from loader
 
 
 def disable_grads(model):
@@ -102,9 +101,7 @@ def disable_grads(model):
 
 
 def count_params(params):
-    total_trainable_params_count = 0 
-    for p in params:
-        total_trainable_params_count += p.numel()
+    total_trainable_params_count = sum(p.numel() for p in params)
     print("total_trainable_params_count is: ", total_trainable_params_count)
 
 
@@ -129,9 +126,9 @@ def create_expt_folder_with_auto_resuming(OUTPUT_ROOT, name):
             if os.path.exists(potential_ckpt):
                 checkpoint = potential_ckpt
                 if get_rank() == 0:
-                    print('ckpt found '+ potential_ckpt)
-                break 
-        curr_tag = 'tag'+str(len(all_existing_tags)).zfill(2)
+                    print(f'ckpt found {potential_ckpt}')
+                break
+        curr_tag = f'tag{str(len(all_existing_tags)).zfill(2)}'
         name = os.path.join( name, curr_tag ) # output/name/tagxx
     else:
         name = os.path.join( name, 'tag00' ) # output/name/tag00
@@ -180,7 +177,7 @@ class Trainer:
         self.autoencoder.load_state_dict( state_dict["autoencoder"]  )
         self.text_encoder.load_state_dict( state_dict["text_encoder"]  )
         self.diffusion.load_state_dict( state_dict["diffusion"]  )
- 
+
         self.autoencoder.eval()
         self.text_encoder.eval()
         disable_grads(self.autoencoder)
@@ -209,25 +206,26 @@ class Trainer:
             params = []
             trainable_names = []
             for name, p in self.model.named_parameters():
-                if ("transformer_blocks" in name) and ("fuser" in name):
-                    params.append(p) 
-                    trainable_names.append(name)
-                elif  "position_net" in name:
+                if (
+                    "transformer_blocks" in name
+                    and "fuser" in name
+                    or "position_net" in name
+                ):
                     params.append(p) 
                     trainable_names.append(name)
                 else:
                     # all new added trainable params have to be haddled above
                     # otherwise it will trigger the following error  
                     assert name in original_params_names, name  
-            
+
             all_params_name = list( self.model.state_dict().keys()  )
             assert set(all_params_name) == set(trainable_names + original_params_names) 
 
-        self.opt = torch.optim.AdamW(params, lr=config.base_learning_rate, weight_decay=config.weight_decay) 
+        self.opt = torch.optim.AdamW(params, lr=config.base_learning_rate, weight_decay=config.weight_decay)
         count_params(params)
-        
+
         self.master_params = list(self.model.parameters()) # note: you cannot assign above params as master_params since that is only trainable one
-        
+
         if config.enable_ema:
             self.ema = deepcopy(self.model)
             self.ema_params = list(self.ema.parameters())
@@ -246,7 +244,7 @@ class Trainer:
         # = = = = = = = = = = create data = = = = = = = = = = #  
         train_dataset_repeats = config.train_dataset_repeats if 'train_dataset_repeats' in config else None
         dataset_train = ConCatDataset(config.train_dataset_names, config.DATA_ROOT, config.which_embedder, train=True, repeats=train_dataset_repeats)
-        sampler = DistributedSampler(dataset_train) if config.distributed else None 
+        sampler = DistributedSampler(dataset_train) if config.distributed else None
         loader_train = DataLoader( dataset_train,  batch_size=config.batch_size, 
                                                    shuffle=(sampler is None),
                                                    num_workers=config.workers, 
@@ -258,10 +256,10 @@ class Trainer:
         if get_rank() == 0:
             total_image = dataset_train.total_images()
             print("Total training images: ", total_image)     
-        
+
 
         # = = = = = = = = = = load from autoresuming ckpt = = = = = = = = = = #
-        self.starting_iter = 0  
+        self.starting_iter = 0
         if checkpoint is not None:
             checkpoint = torch.load(checkpoint, map_location="cpu")
             self.model.load_state_dict(checkpoint["model"])
@@ -356,10 +354,10 @@ class Trainer:
                     scaled_loss.backward()
                 self.opt.step()
             else:
-                enabled = True if self.config.use_mixed else False
+                enabled = bool(self.config.use_mixed)
                 with torch.cuda.amp.autocast(enabled=enabled):  # with torch.autocast(enabled=True):
                     loss = self.run_one_step(batch)
-                scaler.scale(loss).backward() 
+                scaler.scale(loss).backward()
                 scaler.step(self.opt)
                 scaler.update()
 
@@ -377,7 +375,7 @@ class Trainer:
                     self.save_ckpt_and_result()
             synchronize()
 
-        
+
         synchronize()
         print("Training finished. Start exiting")
         exit()
@@ -401,7 +399,7 @@ class Trainer:
             batch = sub_batch( next(self.loader_train), batch_here)
             batch_to_device(batch, self.device)
 
-            
+
             real_images_with_box_drawing = [] # we save this durining trianing for better visualization
             for i in range(batch_here):
                 temp_data = {"image": batch["image"][i], "boxes":batch["boxes"][i]}
@@ -409,10 +407,10 @@ class Trainer:
                 real_images_with_box_drawing.append(im)
             real_images_with_box_drawing = torch.stack(real_images_with_box_drawing)
 
-            
+
             uc = self.text_encoder.encode( batch_here*[""] )
             context = self.text_encoder.encode(  batch["caption"]  )
-            
+
             ddim_sampler = PLMSSampler(self.diffusion, model_wo_wrapper)      
             shape = (batch_here, model_wo_wrapper.in_channels, model_wo_wrapper.image_size, model_wo_wrapper.image_size)
             input = dict( x = None, 
@@ -425,7 +423,7 @@ class Trainer:
                           text_embeddings = batch["text_embeddings"], 
                           image_embeddings = batch["image_embeddings"] )
             samples = ddim_sampler.sample(S=50, shape=shape, input=input, uc=uc, guidance_scale=5)
-            
+
             # old 
             # autoencoder_wo_wrapper = self.autoencoder # Note itself is without wrapper since we do not train that. 
             # autoencoder_wo_wrapper = autoencoder_wo_wrapper.cpu() # To save GPU 
@@ -444,7 +442,10 @@ class Trainer:
                     iters = self.iter_idx+1 )
         if self.config.enable_ema:
             ckpt["ema"] = self.ema.state_dict()
-        torch.save( ckpt, os.path.join(self.name, "checkpoint_"+str(iter_name).zfill(8)+".pth") )
+        torch.save(
+            ckpt,
+            os.path.join(self.name, f"checkpoint_{str(iter_name).zfill(8)}.pth"),
+        )
         torch.save( ckpt, os.path.join(self.name, "checkpoint_latest.pth") )
 
 
